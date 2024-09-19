@@ -1,7 +1,7 @@
 library(shiny)
 
-source("/root/shiny/shinyApps/DiffAnalysis/test.R")
-source("/root/shiny/shinyApps/Heatmap/test.R")
+source("DiffAnalysis/test.R")
+source("Heatmap/test.R")
 
 ui <- fluidPage(
   navlistPanel(
