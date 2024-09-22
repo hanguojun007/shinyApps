@@ -1,7 +1,7 @@
 library(shiny)
 
-source("DiffAnalysis/test.R")
-source("Heatmap/test.R")
+source("DiffAnalysis/DiffAnalysis.R")
+source("ExprHeatmap/ExprHeatmap.R")
 
 ui <- fluidPage(
   navlistPanel(
@@ -10,21 +10,18 @@ ui <- fluidPage(
     "分析类",
     tabPanel(
       "差异分析",
-      "差异分析UI",
-      test_ui()
+      DiffAnalysis_ui("DiffAnalysis")
     ),
     "画图类",
     tabPanel(
       "表达矩阵热图",
       "表达矩阵热图UI",
-      test2_ui()
     )
   )
 )
 
 server <- function(input, output, session) {
-  test_server(input, output, session)
-  test2_server(input, output, session)
+  DiffAnalysis_server("DiffAnalysis")
 }
 
 shinyApp(ui, server)
