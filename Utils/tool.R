@@ -53,9 +53,13 @@ DataTable_server <- function(id, data) {
 #-----------------------------------#
 SmapleGroup_ui <- function(id) {
   tagList(
-    actionButton(shiny::NS(id, "add_group"), "设置分组"),
-    tableOutput(shiny::NS(id, "group_result")),
-    actionButton(shiny::NS(id, "group_reset"), "重设分组")
+    fluidPage(
+      fluidRow(
+        actionButton(shiny::NS(id, "add_group"), "设置分组"),
+        actionButton(shiny::NS(id, "group_reset"), "重设分组")
+      ),
+      tableOutput(shiny::NS(id, "group_result"))
+    )
   )
 }
 
@@ -66,7 +70,7 @@ SmapleGroup_server <- function(id, data) {
     ns <- session$ns
 
     # 初始化分组信息
-    sampleInfo <- reactiveVal(data.frame(Sample = character(), Group = character(), stringsAsFactors = FALSE))
+    sampleInfo <- shiny::reactiveVal(data.frame(Sample = character(), Group = character(), stringsAsFactors = FALSE))
 
     # 可选择的列（动态更新）
     available_columns <- reactive({
@@ -74,7 +78,7 @@ SmapleGroup_server <- function(id, data) {
     })
 
     # 存储最后一次选择的列
-    last_selected_columns <- reactiveVal(list())
+    last_selected_columns <- shiny::reactiveVal(list())
 
     # 点击添加分组时弹出模态框
     observeEvent(input$add_group, {
@@ -165,9 +169,13 @@ SmapleGroup_server <- function(id, data) {
 #-----------------------------------#
 CompareMethod_ui <- function(id) {
   tagList(
-    actionButton(shiny::NS(id, "add_method"), "添加比较组信息"),
-    tableOutput(shiny::NS(id, "method_result")),
-    actionButton(shiny::NS(id, "method_reset"), "重设比较组信息")
+    fluidPage(
+      fluidRow(
+        actionButton(shiny::NS(id, "add_method"), "添加比较组信息"),
+        actionButton(shiny::NS(id, "method_reset"), "重设比较组")
+      ),
+      tableOutput(shiny::NS(id, "method_result"))
+    )
   )
 }
 
@@ -178,7 +186,7 @@ CompareMethod_server <- function(id, sampleInfo) {
     ns <- session$ns
 
     # 初始化比较组信息
-    compareInfo <- reactiveVal(data.frame(Compare = character(), Method = character(), isPair = logical(), stringsAsFactors = FALSE))
+    compareInfo <- shiny::reactiveVal(data.frame(Compare = character(), Method = character(), isPair = logical(), stringsAsFactors = FALSE))
 
     # 可选择的组别（动态更新）
     available_group <- reactive({
@@ -197,7 +205,7 @@ CompareMethod_server <- function(id, sampleInfo) {
           column(4, selectInput(ns("compare_method"), "比较方法", choices = c("t.test", "wilcox.test", "aov"), selected = "t.test")),
           column(4, checkboxInput(ns("isPair"), "是否进行配对", value = FALSE))
         ),
-        textOutput(ns("compare_result")),
+        textOutput(ns("compare_info")),
         footer = tagList(
           modalButton("取消"),
           actionButton(ns("confirm_compare"), "确认")
@@ -210,9 +218,9 @@ CompareMethod_server <- function(id, sampleInfo) {
       req(input$res_groups)
 
       if (length(input$res_groups) < 2) {
-        output$compare_result <- renderText("请至少选择两组进行比较")
+        output$compare_info <- renderText("请至少选择两组进行比较")
       } else {
-        output$compare_result <- renderText(paste(input$res_groups, collapse = "_vs_"))
+        output$compare_info <- renderText(paste(input$res_groups, collapse = "_vs_"))
       }
 
       if (length(input$res_groups) > 2) {
@@ -229,7 +237,7 @@ CompareMethod_server <- function(id, sampleInfo) {
       if (length(input$res_groups) >= 2) {
         # 更新compareInfo
         new_compare <- data.frame(
-          Compare = paste(input$res_groups, collapse = " vs "),
+          Compare = paste(input$res_groups, collapse = "_vs_"),
           Method = input$compare_method,
           isPair = input$isPair,
           stringsAsFactors = FALSE

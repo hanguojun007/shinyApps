@@ -1,6 +1,6 @@
 apt-get update
 apt-get upgrade
-apt-get install -y curl git locales libpng-dev libssl-dev libcurl4-openssl-dev xdg-utils
+apt-get install -y curl git locales libpng-dev libssl-dev libcurl4-openssl-dev xdg-utils libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
 locale-gen en_US.UTF-8
 
 curl -L https://rig.r-pkg.org/deb/rig.gpg -o /etc/apt/trusted.gpg.d/rig.gpg

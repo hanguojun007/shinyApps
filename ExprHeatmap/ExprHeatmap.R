@@ -1,6 +1,5 @@
 library(shiny)
 library(reactable)
-library(ComplexHeatmap)
 
 test2_ui <- function() {
   fluidPage(
