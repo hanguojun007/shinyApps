@@ -1,10 +1,16 @@
 CompareResult_ui <- function(id) {
   tagList(
-    # 动态选择比较组
-    selectInput(shiny::NS(id, "compare_select"), "选择比较组", choices = NULL),
-
-    # 显示选择的比较组差异分析结果
-    reactable::reactableOutput(shiny::NS(id, "compare_result"), width = "auto", height = "auto")
+    fluidPage(
+      fluidRow(
+        # 动态选择比较组
+        selectInput(NS(id, "compare_select"), "选择比较组", choices = NULL, width = "150px"),
+        DownloadFile_ui(NS(id, "download_diff_result"), "下载差异分析结果")
+      ),
+      fluidRow(
+        # 显示选择的比较组差异分析结果
+        DataTable_ui(NS(id, "diff_result"))
+      )
+    )
   )
 }
 
@@ -21,23 +27,30 @@ CompareResult_server <- function(id, compareInfo, diffResults) {
 
 
     # 根据选择的比较组展示对应的差异分析结果
-    output$compare_result <- reactable::renderReactable({
+    # 使用 DataTable_server 显示结果
+    result <- reactive({
       req(input$compare_select, length(diffResults()) > 0)
 
       # 根据选择的比较组名提取对应的分析结果
       selected_group <- input$compare_select
-      print(selected_group)
-      print("____________")
-      print(diffResults())
-      result <- diffResults()[[selected_group]] # diffResults 存储不同组的结果
-      print(result)
+      result <- diffResults()[[selected_group]]
 
       if (!is.null(result)) {
-        reactable::reactable(result, paginationType = "jump", selection = "multiple", onClick = "select", defaultSelected = c(1:nrow(result)))
+        result # 返回对应组的结果
       } else {
-        data.frame(Notice = "没有对应的差异分析结果")
+        data.frame(Notice = "没有对应的差异分析结果") # 返回提示信息
       }
     })
+
+    selectedData <- DataTable_server("diff_result", result, isSelect = TRUE)
+
+    # 下载差异分析结果
+    diffRes <- reactive({
+      req(length(diffResults()) > 0)
+
+      diffResults()
+    })
+    DownloadFile_server("download_diff_result", "差异分析结果", diffRes, fileFormat = "xlsx")
   })
 }
 
@@ -112,23 +125,23 @@ Test <- function(groups, method, sampleInfo) {
       "unpaired_wilcox.test" = .unpairedWilcoxTest
     )
 
-    MeanRes <- MeanRes |>
+    MeanRes <- MeanRes %>%
       dplyr::mutate(`Fold Change` = !!rlang::sym(groupAName) / !!rlang::sym(groupBName))
     pvalue <- .test(dplyr::c_across(dplyr::all_of(sampleA)), dplyr::c_across(dplyr::all_of(sampleB)))
     res <- cbind(MeanRes, tibble::tibble(pvalue = pvalue))
   } else if (length(groups) > 2) {
     samples <- sampleInfo$Sample[sampleInfo$Group %in% groups]
-    tmpData <- sampleInfo |>
-      dplyr::filter(Group %in% groups) |>
-      dplyr::mutate(Group = factor(Group, levels = groups)) |>
+    tmpData <- sampleInfo %>%
+      dplyr::filter(Group %in% groups) %>%
+      dplyr::mutate(Group = factor(Group, levels = groups)) %>%
       dplyr::left_join(tibble::tibble(Sample = samples, value = c_across(all_of(samples))), by = "Sample")
     # print(tmpData)
     #+++++++++++++++++++++++++++++++++++++#
     # 对数据中的NA进行检测，当至少有两组且每组
     # 至少有两个以上非NA的值时，才进行ANOVA检验
     #+++++++++++++++++++++++++++++++++++++#
-    testTmp <- tmpData |>
-      dplyr::group_by(Group) |>
+    testTmp <- tmpData %>%
+      dplyr::group_by(Group) %>%
       dplyr::summarise(n = sum(!is.na(value)))
     if (sum(testTmp$n > 1) > 1) {
       lamp.acv <- aov(value ~ Group, data = tmpData)
@@ -148,8 +161,8 @@ Test <- function(groups, method, sampleInfo) {
 Diff <- function(dat, sampleInfo, compareInfo) {
   dat <- dplyr::rename(dat, ID = 1)
 
-  compareInfo <- compareInfo |>
-    tibble::as_tibble() |>
+  compareInfo <- compareInfo %>%
+    tibble::as_tibble() %>%
     dplyr::mutate(
       Groups = stringr::str_split(Compare, "_vs_"),
       Method = dplyr::if_else(isPair, paste0("paired_", Method), paste0("unpaired_", Method))
@@ -164,12 +177,12 @@ Diff <- function(dat, sampleInfo, compareInfo) {
     method <- compareInfo$Method[[i]]
     samples <- sampleInfo$Sample[sampleInfo$Group %in% groups]
 
-    diffRes <- dat |>
-      dplyr::select(ID, dplyr::all_of(samples)) |>
-      dplyr::rowwise() |>
+    diffRes <- dat %>%
+      dplyr::select(ID, dplyr::all_of(samples)) %>%
+      dplyr::rowwise() %>%
       dplyr::mutate(
         res = Test(groups = groups, method = method, sampleInfo = sampleInfo)
-      ) |>
+      ) %>%
       tidyr::unnest(res)
     diffResultsTmp[[compare]] <- diffRes
   }

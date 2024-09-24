@@ -1,48 +1,109 @@
 #-----------------------------------#
 # 读取文件，并生成表格展示，返回选择的行号
 #-----------------------------------#
-UploadFile_ui <- function(id) {
-  shiny::tagList(
-    fileInput(shiny::NS(id, "FileUpload"), label = "FileUpload", placeholder = "Upload File", accept = c("tsv", "csv", "xlsx")),
+UploadFile_ui <- function(id, label = "FileUpload", placeholder = "Upload File", multiple = FALSE) {
+  tagList(
+    fileInput(NS(id, "FileUpload"), label = label, placeholder = placeholder, multiple = multiple, accept = c("tsv", "csv", "xlsx")),
   )
 }
 
-
 ReadFile_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    data <- reactive({
+    uploadFileInfo <- reactive({
       req(input$FileUpload)
 
-      if (tools::file_ext(input$FileUpload$datapath) == "xlsx") {
-        readxl::read_excel(input$FileUpload$datapath)
-      } else {
-        vroom::vroom(input$FileUpload$datapath)
-      }
+      input$FileUpload %>%
+        dplyr::mutate(name = tools::file_path_sans_ext(name))
     })
 
-    return(data)
+    return(uploadFileInfo)
   })
 }
+
+ReadFile <- function(filePath) {
+  if (tools::file_ext(filePath) == "xlsx") {
+    readxl::read_excel(filePath)
+  } else if (tools::file_ext(filePath) == "csv") {
+    vroom::vroom(filePath, delim = ",")
+  } else if (tools::file_ext(filePath) == "tsv") {
+    vroom::vroom(filePath, delim = "\t")
+  } else {
+    vroom::vroom(filePath)
+  }
+}
+
+#-----------------------------------#
+# 下载文件
+#-----------------------------------#
+DownloadFile_ui <- function(id, label = "Download") {
+  tagList(
+    downloadButton(NS(id, "download"), label = label)
+  )
+}
+
+DownloadFile_server <- function(id, fileName, fileData, fileFormat = "csv") {
+  stopifnot(is.character(fileName))
+  stopifnot(fileFormat %in% c("xlsx", "csv", "tsv"))
+  stopifnot(is.reactive(fileData))
+  moduleServer(id, function(input, output, session) {
+    output$download <- downloadHandler(
+      filename = function() {
+        glue::glue("{fileName}.{fileFormat}")
+      },
+      content = function(file) {
+        if (fileFormat == "xlsx") {
+          if (is.list(fileData())) {
+            # 创建新的 Excel 工作簿
+            wb <- openxlsx::createWorkbook()
+
+            for (compare in names(fileData())) {
+              # 后续对compare进行处理，符合31字符
+              sheetName <- compare
+              openxlsx::addWorksheet(wb, sheetName) # 添加工作表
+              openxlsx::writeData(wb, sheet = sheetName, fileData()[[sheetName]]) # 写入数据
+            }
+
+            # 保存工作簿到文件
+            openxlsx::saveWorkbook(wb, file)
+          } else {
+            openxlsx::write.xlsx(fileData(), file)
+          }
+        } else if (fileFormat == "tsv") {
+          vroom::vroom_write(fileData(), file, delim = "\t")
+        } else {
+          vroom::vroom_write(fileData(), file, delim = ",")
+        }
+      }
+    )
+  })
+}
+
 
 #-----------------------------------#
 # table 展示，返回选择的行号
 #-----------------------------------#
 DataTable_ui <- function(id) {
   tagList(
-    reactable::reactableOutput(shiny::NS(id, "table"), width = "auto", height = "auto")
+    reactable::reactableOutput(NS(id, "table"), width = "auto", height = "auto")
   )
 }
 
-DataTable_server <- function(id, data) {
-  stopifnot(is.reactive(data))
+DataTable_server <- function(id, tableData, isSelect = TRUE) {
+  stopifnot(is.reactive(tableData))
   moduleServer(id, function(input, output, session) {
-    output$table <- reactable::renderReactable({
-      reactable::reactable(data(), paginationType = "jump", selection = "multiple", onClick = "select", defaultSelected = c(1:nrow(data())))
-    })
+    if (isSelect) {
+      output$table <- reactable::renderReactable({
+        reactable::reactable(tableData(), paginationType = "jump", selection = "multiple", onClick = "select", defaultSelected = c(1:nrow(tableData())))
+      })
 
-    selected <- reactive(getReactableState("table", "selected"))
+      selected <- reactive(getReactableState("table", "selected"))
 
-    return(selected)
+      return(selected)
+    } else {
+      output$table <- reactable::renderReactable({
+        reactable::reactable(tableData())
+      })
+    }
   })
 }
 
@@ -55,30 +116,43 @@ SmapleGroup_ui <- function(id) {
   tagList(
     fluidPage(
       fluidRow(
-        actionButton(shiny::NS(id, "add_group"), "设置分组"),
-        actionButton(shiny::NS(id, "group_reset"), "重设分组")
+        actionButton(NS(id, "add_group"), "设置分组"),
+        actionButton(NS(id, "group_reset"), "重设分组")
       ),
-      tableOutput(shiny::NS(id, "group_result"))
+      fluidRow(tableOutput(NS(id, "group_result"))),
+      fluidRow(DownloadFile_ui(NS(id, "download_group"), "下载分组信息"))
     )
   )
 }
 
-SmapleGroup_server <- function(id, data) {
+SmapleGroup_server <- function(id, data, uploadFileInfo) {
   stopifnot(is.reactive(data))
+  stopifnot(is.reactive(uploadFileInfo))
   moduleServer(id, function(input, output, session) {
     # 获取当前模块的命名空间
     ns <- session$ns
 
     # 初始化分组信息
     sampleInfo <- shiny::reactiveVal(data.frame(Sample = character(), Group = character(), stringsAsFactors = FALSE))
+    # 更新 sampleInfo 的值
+    observe({
+      req(uploadFileInfo())
+      sampleInfoPath <- uploadFileInfo()$datapath[uploadFileInfo()$name == "sampleInfo"]
+
+      # 检查样本信息文件是否存在
+      if (length(sampleInfoPath) > 0) {
+        sampleInfo(ReadFile(sampleInfoPath)) # 更新 sampleInfo 的值
+      }
+    })
 
     # 可选择的列（动态更新）
     available_columns <- reactive({
+      req(sampleInfo())
       setdiff(names(data()), sampleInfo()$Sample)
     })
 
     # 存储最后一次选择的列
-    last_selected_columns <- shiny::reactiveVal(list())
+    last_selected_columns <- reactiveVal(list())
 
     # 点击添加分组时弹出模态框
     observeEvent(input$add_group, {
@@ -141,13 +215,9 @@ SmapleGroup_server <- function(id, data) {
       updateCheckboxGroupInput(session, "res_columns", choices = available_columns())
     })
 
-    # 点击 Confirm 按钮时，更新分组信息
+    # 点击 Confirm 按钮时，关闭模态框
     observeEvent(input$confirm_group, {
       removeModal() # 关闭模态框
-      output$group_result <- renderTable({
-        req(sampleInfo())
-        sampleInfo() # 输出分组信息
-      })
     })
 
     # 在模态框中显示 reactable
@@ -156,10 +226,17 @@ SmapleGroup_server <- function(id, data) {
       sampleInfo() # 输出分组信息
     })
 
+    # 再网页中显示 sampleInfo
+    output$group_result <- renderTable({
+      req(nrow(sampleInfo()) > 0)
+      sampleInfo() # 输出分组信息
+    })
+
     observeEvent(input$group_reset, {
       sampleInfo(data.frame(Sample = character(), Group = character(), stringsAsFactors = FALSE))
     })
 
+    DownloadFile_server("download_group", "sampleInfo", sampleInfo)
     return(sampleInfo)
   })
 }
@@ -171,22 +248,34 @@ CompareMethod_ui <- function(id) {
   tagList(
     fluidPage(
       fluidRow(
-        actionButton(shiny::NS(id, "add_method"), "添加比较组信息"),
-        actionButton(shiny::NS(id, "method_reset"), "重设比较组")
+        actionButton(NS(id, "add_method"), "添加比较组信息"),
+        actionButton(NS(id, "method_reset"), "重设比较组")
       ),
-      tableOutput(shiny::NS(id, "method_result"))
+      fluidRow(tableOutput(NS(id, "method_result"))),
+      fluidRow(DownloadFile_ui(NS(id, "download_method"), "下载比较信息"))
     )
   )
 }
 
-CompareMethod_server <- function(id, sampleInfo) {
+CompareMethod_server <- function(id, sampleInfo, uploadFileInfo) {
   stopifnot(is.reactive(sampleInfo))
+  stopifnot(is.reactive(uploadFileInfo))
   moduleServer(id, function(input, output, session) {
     # 获取当前模块的命名空间
     ns <- session$ns
 
     # 初始化比较组信息
-    compareInfo <- shiny::reactiveVal(data.frame(Compare = character(), Method = character(), isPair = logical(), stringsAsFactors = FALSE))
+    compareInfo <- reactiveVal(data.frame(Compare = character(), Method = character(), isPair = logical(), stringsAsFactors = FALSE))
+    # 更新 compareInfo 的值
+    observe({
+      req(uploadFileInfo())
+      compareInfoPath <- uploadFileInfo()$datapath[uploadFileInfo()$name == "compareInfo"]
+
+      # 检查样本信息文件是否存在
+      if (length(compareInfoPath) > 0) {
+        compareInfo(ReadFile(compareInfoPath)) # 更新 sampleInfo 的值
+      }
+    })
 
     # 可选择的组别（动态更新）
     available_group <- reactive({
@@ -242,8 +331,15 @@ CompareMethod_server <- function(id, sampleInfo) {
           isPair = input$isPair,
           stringsAsFactors = FALSE
         )
-        compareInfo(rbind(compareInfo(), new_compare))
-
+        # 判断 new_compare 是否存在于 compareInfo 中
+        if (nrow(compareInfo() %>%
+          filter(
+            Compare == new_compare$Compare,
+            Method == new_compare$Method,
+            isPair == new_compare$isPair
+          )) == 0) {
+          compareInfo(bind_rows(compareInfo(), new_compare))
+        }
         # 关闭模态框
         removeModal()
       }
@@ -251,7 +347,7 @@ CompareMethod_server <- function(id, sampleInfo) {
 
     # 渲染比较组信息表格
     output$method_result <- renderTable({
-      req(compareInfo())
+      req(nrow(compareInfo()) > 0)
       compareInfo()
     })
 
@@ -259,6 +355,8 @@ CompareMethod_server <- function(id, sampleInfo) {
     observeEvent(input$method_reset, {
       compareInfo(data.frame(Compare = character(), Method = character(), isPair = logical(), stringsAsFactors = FALSE))
     })
+
+    DownloadFile_server("download_method", "compareInfo", compareInfo)
 
     return(compareInfo)
   })

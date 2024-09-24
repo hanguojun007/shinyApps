@@ -8,43 +8,61 @@ DiffAnalysis_ui <- function(id) {
     sidebarLayout(
       sidebarPanel(
         fluidPage(
-          fluidRow(UploadFile_ui(shiny::NS(id, "diff"))),
-          fluidRow(SmapleGroup_ui(shiny::NS(id, "diff"))),
-          fluidRow(CompareMethod_ui(shiny::NS(id, "diff"))),
-          fluidRow(
-            actionButton(shiny::NS(id, "startAnalysis"), "开始差异分析"),
-          )
+          fluidRow(UploadFile_ui(NS(id, "diff"), label = "上传文件", multiple = TRUE), style = "margin-bottom: 20px;"),
+          # tags$br(), # 添加间隔
+          fluidRow(SmapleGroup_ui(NS(id, "diff")), style = "margin-bottom: 20px;"),
+          # tags$br(), # 添加间隔
+          fluidRow(CompareMethod_ui(NS(id, "diff")), style = "margin-bottom: 20px;"),
+          # tags$br(), # 添加间隔
+          fluidRow(actionButton(NS(id, "startAnalysis"), "开始差异分析"), style = "margin-bottom: 20px;")
         ),
         width = 4
       ),
       mainPanel(
-        DataTable_ui(shiny::NS(id, "diff")),
-        textOutput(shiny::NS(id, "text")),
+        DataTable_ui(NS(id, "diff")),
         width = 8
       )
     ),
-    textOutput(shiny::NS(id, "error_message")), # 展示错误信息
-    CompareResult_ui(shiny::NS(id, "diff"))
+    textOutput(NS(id, "error_message")), # 展示错误信息
+    CompareResult_ui(NS(id, "diff"))
   )
 }
 
 
 DiffAnalysis_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    data <- ReadFile_server("diff")
-    selected <- DataTable_server("diff", data)
+    uploadFileInfo <- ReadFile_server("diff")
 
-    output$text <- renderText({
-      req(selected())
-      selected()
+    #--------------------------------#
+    # 处理表达矩阵数据
+    #--------------------------------#
+    data <- reactive({
+      req(uploadFileInfo())
+      exprMatrixPath <- uploadFileInfo()$datapath[uploadFileInfo()$name == "exprMatrix"]
+      if (length(exprMatrixPath) > 0) {
+        return(ReadFile(exprMatrixPath))
+      } else {
+        return(NULL)
+      }
     })
+    DataTable_server("diff", data, isSelect = FALSE)
 
-    sampleInfo <- SmapleGroup_server("diff", data)
-    compareInfo <- CompareMethod_server("diff", sampleInfo)
+    #--------------------------------#
+    # 处理样本分组信息
+    #--------------------------------#
+    sampleInfo <- SmapleGroup_server("diff", data, uploadFileInfo)
 
-    # 定义一个全局的 reactiveVal 来存储差异分析结果和错误信息
-    diffResults <- shiny::reactiveVal(list())
-    errorMessage <- shiny::reactiveVal(NULL) # 用于存储错误信息
+
+    #--------------------------------#
+    # 处理组别比较信息
+    #--------------------------------#
+    compareInfo <- CompareMethod_server("diff", sampleInfo, uploadFileInfo)
+
+    #--------------------------------#
+    # 进行差异分析
+    #--------------------------------#
+    diffResults <- reactiveVal(list()) # 定义一个全局的 reactiveVal 来存储差异分析结果和错误信息
+    errorMessage <- reactiveVal(NULL) # 用于存储错误信息
 
     observeEvent(input$startAnalysis, {
       req(data(), sampleInfo(), compareInfo())
@@ -52,18 +70,12 @@ DiffAnalysis_server <- function(id) {
       # 捕获差异分析过程中的错误
       tryCatch(
         {
-          # 执行差异分析
-          newDiffResults <- Diff(data(), sampleInfo(), compareInfo())
-
-          # 更新 diffResults 的值
-          diffResults(newDiffResults)
-
-          # 清空错误信息
-          errorMessage("分析成功")
+          newDiffResults <- Diff(data(), sampleInfo(), compareInfo()) # 执行差异分析
+          diffResults(newDiffResults) # 更新 diffResults 的值
+          errorMessage("分析成功") # 更新信息
         },
         error = function(e) {
-          # 捕获错误并更新错误信息
-          errorMessage(paste("差异分析时出错:", e$message))
+          errorMessage(paste("差异分析时出错:", e$message)) # 捕获错误并更新错误信息
         }
       )
     })
@@ -74,7 +86,9 @@ DiffAnalysis_server <- function(id) {
       errorMessage()
     })
 
-    # 将 diffResults 传递给 CompareResult_server 模块
+    #--------------------------------#
+    # 展示差异分析结果
+    #--------------------------------#
     CompareResult_server("diff", compareInfo, diffResults)
   })
 }
