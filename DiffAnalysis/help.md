@@ -10,7 +10,8 @@
 
 ### 文件内容
 
-#### [exprMatrix]()
+#### <a href="https://github.com/hanguojun007/shinyApps/blob/main/DiffAnalysis/exprMatrix.csv" target="_blank">exprMatrix</a>
+
 
 | gene    | Feature1     | Feature2     | Feature3     |
 | ------- | ------------ | ------------ | ------------ |
@@ -21,7 +22,7 @@
 * 文件名固定为exprMatrix。
 * 列名不做要求，列顺序为：第一列是特征名列，其余列是样本列。
 
-#### [sampleInfo]()
+#### <a href="https://github.com/hanguojun007/shinyApps/blob/main/DiffAnalysis/sampleInfo.csv" target="_blank">sampleInfo</a>
 
 | Sample   | Group |
 | -------- | ----- |
@@ -36,7 +37,7 @@
 * 第一列为样本列，列名固定。
 * 第二列为分组列，列名固定。
 
-#### [compareInfo]()
+#### <a href="https://github.com/hanguojun007/shinyApps/blob/main/DiffAnalysis/compareInfo.csv" target="_blank">compareInfo</a>
 
 | Compare | Method | isPair |
 | ------- | ------ | ------ |
