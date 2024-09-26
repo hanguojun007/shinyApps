@@ -248,7 +248,7 @@ CompareMethod_ui <- function(id) {
   tagList(
     fluidPage(
       fluidRow(
-        actionButton(NS(id, "add_method"), "添加比较组信息"),
+        actionButton(NS(id, "add_method"), "添加比较组"),
         actionButton(NS(id, "method_reset"), "重设比较组")
       ),
       fluidRow(tableOutput(NS(id, "method_result"))),
@@ -334,9 +334,7 @@ CompareMethod_server <- function(id, sampleInfo, uploadFileInfo) {
         # 判断 new_compare 是否存在于 compareInfo 中
         if (nrow(compareInfo() %>%
           filter(
-            Compare == new_compare$Compare,
-            Method == new_compare$Method,
-            isPair == new_compare$isPair
+            Compare == new_compare$Compare # 相同比较组名字的无法添加
           )) == 0) {
           compareInfo(bind_rows(compareInfo(), new_compare))
         }
